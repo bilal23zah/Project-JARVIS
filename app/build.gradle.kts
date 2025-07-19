@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.you.projectjarvis" // Make sure this matches the package name you used before
+    namespace = "com.you.projectjarvis" // Make sure this matches your package name
     compileSdk = 34
 
     defaultConfig {
@@ -48,8 +48,8 @@ dependencies {
     // Google Generative AI (Gemini) Library
     implementation("com.google.ai.client.generativeai:generativeai:0.2.2")
 
+    // Lifecycle and Coroutines for background tasks
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+
     // Testing Libraries
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
-}
+   
