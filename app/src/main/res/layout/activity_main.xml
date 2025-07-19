@@ -19,6 +19,20 @@
         android:textColor="#30C5FF"
         android:textSize="24sp"
         android:fontFamily="monospace" />
+        
+    <!-- NEW: API Key Settings Button -->
+    <ImageView
+        android:id="@+id/button_settings"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="15dp"
+        android:layout_marginEnd="15dp"
+        android:padding="8dp"
+        android:src="@android:drawable/ic_menu_manage"
+        app:tint="#30C5FF"
+        android:contentDescription="Settings"/>
 
     <!-- Conversation Display Area -->
     <ScrollView
@@ -37,4 +51,19 @@
             android:textSize="18sp"
             android:padding="10dp"
             android:lineSpacingExtra="4dp" />
-   
+    </ScrollView>
+
+    <!-- Microphone Button -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/button_mic"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="30dp"
+        android:src="@android:drawable/ic_btn_speak_now"
+        app:backgroundTint="#30C5FF"
+        app:tint="#FFFFFF"
+        android:contentDescription="Activate Voice Command" />
+
+</RelativeLayout>
