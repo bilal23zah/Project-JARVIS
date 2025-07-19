@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
@@ -22,14 +23,14 @@ import com.google.ai.client.generativeai.GenerativeModel
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private lateinit var logTextView: TextView
     private lateinit var micButton: FloatingActionButton
     private lateinit var settingsButton: ImageView
     private lateinit var speechRecognizer: SpeechRecognizer
+    private lateinit var tts: TextToSpeech
 
-    // Activity Result Launcher for microphone permission
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (isGranted) {
@@ -52,13 +53,35 @@ class MainActivity : AppCompatActivity() {
         settingsButton.setOnClickListener { showApiKeyDialog() }
         micButton.setOnClickListener { startListening() }
         
-        // Setup Speech Recognizer
+        // Setup Speech Recognizer and Text-to-Speech
         setupSpeechRecognizer()
+        tts = TextToSpeech(this, this)
 
         // Check for API key and permissions on startup
         checkInitialState()
     }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            // CHANGE HERE: Requesting a British English voice.
+            val result = tts.setLanguage(Locale.UK) 
+            
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                logTextView.append("\n\n[TTS_ERROR] The desired British accent is not available. Falling back to default.")
+                // Fallback to US English if UK is not available
+                tts.setLanguage(Locale.US)
+            } else {
+                 logTextView.append("\n\n[TTS_INFO] British voice module online.")
+            }
+        } else {
+            logTextView.append("\n\n[TTS_ERROR] Voice module initialization failed.")
+        }
+    }
     
+    private fun speak(text: String) {
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "")
+    }
+
     private fun setupSpeechRecognizer() {
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
         val speechRecognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
@@ -66,9 +89,7 @@ class MainActivity : AppCompatActivity() {
         speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
 
         speechRecognizer.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {
-                logTextView.append("\n\nListening...")
-            }
+            override fun onReadyForSpeech(params: Bundle?) { logTextView.append("\n\nListening...") }
             override fun onResults(results: Bundle?) {
                 val spokenText = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.get(0)
                 if (!spokenText.isNullOrEmpty()) {
@@ -79,19 +100,13 @@ class MainActivity : AppCompatActivity() {
             override fun onError(error: Int) { 
                 val errorMessage = when(error) {
                     SpeechRecognizer.ERROR_AUDIO -> "Audio recording error."
-                    SpeechRecognizer.ERROR_CLIENT -> "Client side error."
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Insufficient permissions."
-                    SpeechRecognizer.ERROR_NETWORK -> "Network error."
-                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout."
-                    SpeechRecognizer.ERROR_NO_MATCH -> "No match found. Please try again."
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer is busy."
-                    SpeechRecognizer.ERROR_SERVER -> "Error from server."
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech input."
-                    else -> "An unknown speech error occurred."
+                    SpeechRecognizer.ERROR_NO_MATCH -> "I couldn't quite catch that, Sir. Please try again."
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "I didn't hear anything, Sir."
+                    else -> "A speech recognition error occurred."
                 }
-                logTextView.append("\n\n[ERROR] $errorMessage")
+                logTextView.append("\n\n[J.A.R.V.I.S.] $errorMessage")
+                speak(errorMessage)
             }
-            // Other listener methods can be left empty
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
@@ -102,26 +117,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startListening() {
-        // Check for microphone permission first
-        when {
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED -> {
-                // Permission is granted, start listening
-                speechRecognizer.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH))
-            }
-            else -> {
-                // Permission is not granted, request it
-                requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            speechRecognizer.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH))
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
     private fun getResponseFromAI(query: String) {
         val apiKey = getApiKey()
         if (apiKey.isNullOrEmpty()) {
-            logTextView.append("\n\n[CRITICAL] API Key not set. Cannot contact the AI.")
+            val errorMsg = "[CRITICAL] API Key not set. Cannot contact the AI."
+            logTextView.append("\n\n$errorMsg")
+            speak("Sir, my cognitive functions are offline. Please set the API key.")
             return
         }
 
@@ -129,37 +137,31 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val generativeModel = GenerativeModel(
-                    modelName = "gemini-pro",
-                    apiKey = apiKey
-                )
+                val generativeModel = GenerativeModel(modelName = "gemini-pro", apiKey = apiKey)
                 val response = generativeModel.generateContent(query)
-                // Using \r to overwrite the "Thinking..." message
-                logTextView.append("\rJ.A.R.V.I.S.: ${response.text}                ")
+                val responseText = response.text ?: "I am unable to provide a response at this moment."
+                logTextView.append("\rJ.A.R.V.I.S.: $responseText                ")
+                speak(responseText)
             } catch (e: Exception) {
-                logTextView.append("\rJ.A.R.V.I.S.: [ERROR] ${e.message}            ")
+                val errorMsg = "I seem to have encountered a processing error, Sir."
+                logTextView.append("\rJ.A.R.V.I.S.: $errorMsg            ")
+                speak(errorMsg)
             }
         }
     }
 
     private fun checkInitialState() {
         logTextView.text = "Systems online. Welcome back, Sir."
-        if (getApiKey() == null) {
-            logTextView.append("\n\nNOTICE: API Key not found. Please add it via the settings icon.")
-        }
+        if (getApiKey() == null) { logTextView.append("\n\nNOTICE: API Key not found.") }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            logTextView.append("\n\nNOTICE: Microphone access required for voice commands.")
+            logTextView.append("\n\nNOTICE: Microphone access required.")
         }
     }
 
-    // --- API Key Dialog and Storage Functions (from previous step) ---
     private fun showApiKeyDialog() {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("Set API Key")
-        val input = EditText(this).apply { 
-            hint = "Paste your Google AI API Key here"
-            maxLines = 1
-        }
+        val input = EditText(this).apply { hint = "Paste your Google AI API Key here"; maxLines = 1 }
         builder.setView(input)
         builder.setPositiveButton("OK") { dialog, _ ->
             val key = input.text.toString()
@@ -167,8 +169,7 @@ class MainActivity : AppCompatActivity() {
                 saveApiKey(key.trim())
                 Toast.makeText(this, "API Key saved successfully.", Toast.LENGTH_SHORT).show()
                 logTextView.text = "API Key has been configured. I am ready, Sir."
-            } else {
-                Toast.makeText(this, "API Key cannot be empty.", Toast.LENGTH_SHORT).show()
+                speak("Cognitive module calibrated. I am online and ready.")
             }
             dialog.dismiss()
         }
@@ -186,7 +187,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // It's crucial to release the speech recognizer to prevent memory leaks
         speechRecognizer.destroy()
+        if (::tts.isInitialized) {
+            tts.stop()
+            tts.shutdown()
+        }
     }
 }
